@@ -543,6 +543,7 @@ func (this *go101) Play() {
 		this.Pause()
 	} else {
 		this.Status = STATUS_PLAY
+		Debug("Play sig.")
 	}
 }
 

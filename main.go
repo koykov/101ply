@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -20,7 +21,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"flag"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/fsnotify/fsnotify"
@@ -33,9 +33,9 @@ import (
 )
 
 const (
-	STATUS_PLAY   = 0x100
-	STATUS_PAUSE  = 0x200
-	STATUS_STOP   = 0x300
+	STATUS_PLAY  = 0x100
+	STATUS_PAUSE = 0x200
+	STATUS_STOP  = 0x300
 )
 
 // Error handling types
@@ -49,74 +49,74 @@ type Exception interface{}
 
 // JSON types
 type Hotkey struct {
-	Key					string `json:"key"`
-	Desc				string `json:"desc"`
+	Key  string `json:"key"`
+	Desc string `json:"desc"`
 }
 
 type TrackInfo struct {
-	Status				uint64 `json:"status"`
-	Result				TrackInfo__Result `json:"result"`
-	ErrorCode			uint64 `json:"errorCode"`
+	Status    uint64            `json:"status"`
+	Result    TrackInfo__Result `json:"result"`
+	ErrorCode uint64            `json:"errorCode"`
 }
 
 type TrackInfo__Result struct {
-	About				TrackInfo__Result__About `json:"about"`
-	Stat				TrackInfo__Result__Stat `json:"stat"`
+	About TrackInfo__Result__About `json:"about"`
+	Stat  TrackInfo__Result__Stat  `json:"stat"`
 }
 
 type TrackInfo__Result__About struct {
-	Title 				string `json:"title"`
-	Artist				string `json:"title_executor"`
-	Audio				[]TrackInfo__Result__About__Audio `json:"audio"`
-	Album				TrackInfo__Result__About__Album `json:"album"`
+	Title  string                            `json:"title"`
+	Artist string                            `json:"title_executor"`
+	Audio  []TrackInfo__Result__About__Audio `json:"audio"`
+	Album  TrackInfo__Result__About__Album   `json:"album"`
 }
 
 type TrackInfo__Result__About__Audio struct {
-	TrackUid			uint64 `json:"trackuid"`
-	Filename			string `json:"filename"`
+	TrackUid uint64 `json:"trackuid"`
+	Filename string `json:"filename"`
 }
 
 type TrackInfo__Result__About__Album struct {
-	Title				string `json:"title"`
-	ReleaseDate			string `json:"releaseDate"`
+	Title       string `json:"title"`
+	ReleaseDate string `json:"releaseDate"`
 }
 
 type TrackInfo__Result__Stat struct {
-	StartSong			uint64 `json:"startSong"`
-	FinishSong			uint64 `json:"finishSong"`
-	ServerTime			uint64 `json:"serverTime"`
+	StartSong  uint64 `json:"startSong"`
+	FinishSong uint64 `json:"finishSong"`
+	ServerTime uint64 `json:"serverTime"`
 }
 
 // General types
 type go101 struct {
-	ChannelGroups		map[uint64]go101ChannelGroup
-	ChannelGroupsUrl	string
-	CurrentGroup		uint64
-	CurrentChannel		uint64
-	CurrentTrack		go101TrackInfo
-	TrackUid			uint64
-	Status				uint64
-	NextFetch			uint64
+	ChannelGroups    map[uint64]go101ChannelGroup
+	ChannelGroupsUrl string
+	CurrentGroup     uint64
+	CurrentChannel   uint64
+	CurrentTrack     go101TrackInfo
+	TrackUid         uint64
+	Status           uint64
+	NextFetch        uint64
 }
 
 type go101TrackInfo struct {
-	TrackUid			uint64
-	Artist				string
-	Title				string
-	Album				string
-	AlbumDate			string
-	PlayURL				string
+	TrackUid  uint64
+	Artist    string
+	Title     string
+	Album     string
+	AlbumDate string
+	PlayURL   string
 }
 
 type go101Channel struct {
-	Id					uint64 `json:"Id"`
-	Title				string `json:"Title"`
+	Id    uint64 `json:"Id"`
+	Title string `json:"Title"`
 }
 
 type go101ChannelGroup struct {
-	Id					uint64 `json:"Id"`
-	Title				string `json:"Title"`
-	Channels			map[uint64]go101Channel `json:"Channels"`
+	Id       uint64                  `json:"Id"`
+	Title    string                  `json:"Title"`
+	Channels map[uint64]go101Channel `json:"Channels"`
 }
 
 var go101o go101
@@ -252,7 +252,7 @@ func main() {
 			log.Fatal("Error reading cache file: %s", err.Error())
 		}
 		go101o.ChannelGroups = make(map[uint64]go101ChannelGroup)
-		json.Unmarshal(raw, &go101o.ChannelGroups)
+		_ = json.Unmarshal(raw, &go101o.ChannelGroups)
 		Debug("Cache hit, reading file %s", cacheFile)
 	} else {
 		// Fetch channels and groups from 101.ru
@@ -299,8 +299,8 @@ func main() {
 		channelIndex, _ := reader.ReadString('\n')
 		go101o.CurrentChannel, _ = strconv.ParseUint(strings.Trim(channelIndex, "\n"), 10, 64)
 	} else {
-		for gid, _ := range go101o.ChannelGroups {
-			for cid, _ := range go101o.ChannelGroups[gid].Channels {
+		for gid := range go101o.ChannelGroups {
+			for cid := range go101o.ChannelGroups[gid].Channels {
 				if cid == uint64(*channelPtr) {
 					go101o.CurrentGroup = gid
 				}
@@ -371,8 +371,10 @@ func PutToFile(filename string, contents string) {
 	if err != nil {
 		log.Fatal("Error when file is created: ", err.Error())
 	}
-	defer file.Close()
-	file.WriteString(contents)
+	defer func () {
+		_ = file.Close()
+	}()
+	_, _ = file.WriteString(contents)
 	if err = file.Sync(); err != nil {
 		log.Fatal("Error when saving file: ", err.Error())
 	}
@@ -402,7 +404,7 @@ func bindall(hotkeyConfig string, X *xgbutil.XUtil) (err error) {
 func (hotkey Hotkey) attach(X *xgbutil.XUtil) {
 	err := keybind.KeyPressFun(
 		func(X *xgbutil.XUtil, e xevent.KeyPressEvent) {
-			if (go101o.Status == STATUS_STOP || go101o.Status == STATUS_PAUSE) {
+			if go101o.Status == STATUS_STOP || go101o.Status == STATUS_PAUSE {
 				go go101o.Resume()
 			} else {
 				go go101o.Pause()
@@ -414,7 +416,7 @@ func (hotkey Hotkey) attach(X *xgbutil.XUtil) {
 }
 
 // Convert seconds to "mm:ss" time format.
-func FormatTime(s uint64) (string) {
+func FormatTime(s uint64) string {
 	min := s / 60
 	sec := s % 60
 	return fmt.Sprintf("%d:%d", min, sec)
@@ -423,13 +425,13 @@ func FormatTime(s uint64) (string) {
 // Print formatted debug message.
 func Debug(message string, a ...interface{}) {
 	if verbose {
-		fmt.Println(fmt.Sprintf("Debug: " + message, a))
+		fmt.Println(fmt.Sprintf("Debug: "+message, a))
 	}
 }
 
 // Fetches channel groups from 101.ru
-func (this *go101) FetchChannelGroups() {
-	this.ChannelGroups = make(map[uint64]go101ChannelGroup)
+func (p *go101) FetchChannelGroups() {
+	p.ChannelGroups = make(map[uint64]go101ChannelGroup)
 
 	doc, err := goquery.NewDocument("http://101.ru/radio-top")
 	if err != nil {
@@ -441,7 +443,7 @@ func (this *go101) FetchChannelGroups() {
 		if exists {
 			id, _ := strconv.ParseUint(path.Base(href), 0, 64)
 			channels := make(map[uint64]go101Channel, 0)
-			this.ChannelGroups[id] = go101ChannelGroup{
+			p.ChannelGroups[id] = go101ChannelGroup{
 				id, title, channels,
 			}
 		}
@@ -449,8 +451,8 @@ func (this *go101) FetchChannelGroups() {
 }
 
 // Fetches channels from 101.ru
-func (this *go101) FetchChannels() {
-	for gid, cg := range this.ChannelGroups {
+func (p *go101) FetchChannels() {
+	for gid, cg := range p.ChannelGroups {
 
 		doc, err := goquery.NewDocument(fmt.Sprintf("http://101.ru/radio-group/group/%d", cg.Id))
 		if err != nil {
@@ -462,7 +464,7 @@ func (this *go101) FetchChannels() {
 			href, exists := selection.Find("a").Attr("href")
 			if exists {
 				cid, _ := strconv.ParseUint(path.Base(href), 0, 64)
-				this.ChannelGroups[gid].Channels[cid] = go101Channel{
+				p.ChannelGroups[gid].Channels[cid] = go101Channel{
 					cid, title,
 				}
 			}
@@ -471,16 +473,18 @@ func (this *go101) FetchChannels() {
 }
 
 // Fetch channel info.
-func (this *go101) FetchChannelInfo() {
+func (p *go101) FetchChannelInfo() {
 	Block{
 		Try: func() {
-			playlistUrl := fmt.Sprintf("http://101.ru/api/channel/getTrackOnAir/%d/channel/?dataFormat=json", this.CurrentChannel)
+			playlistUrl := fmt.Sprintf("http://101.ru/api/channel/getTrackOnAir/%d/channel/?dataFormat=json", p.CurrentChannel)
 			response, err := http.Get(playlistUrl)
 			if err != nil {
 				panic(err)
 				//return
 			}
-			defer response.Body.Close()
+			defer func() {
+				_ = response.Body.Close()
+			}()
 
 			b, err := ioutil.ReadAll(response.Body)
 			if err != nil {
@@ -492,27 +496,27 @@ func (this *go101) FetchChannelInfo() {
 			if err != nil {
 				panic(err)
 			}
-			this.CurrentTrack.TrackUid = trackInfo.Result.About.Audio[0].TrackUid
-			this.CurrentTrack.Title= trackInfo.Result.About.Title
-			this.CurrentTrack.Artist = trackInfo.Result.About.Artist
-			this.CurrentTrack.Album = trackInfo.Result.About.Album.Title
-			this.CurrentTrack.AlbumDate = trackInfo.Result.About.Album.ReleaseDate
+			p.CurrentTrack.TrackUid = trackInfo.Result.About.Audio[0].TrackUid
+			p.CurrentTrack.Title = trackInfo.Result.About.Title
+			p.CurrentTrack.Artist = trackInfo.Result.About.Artist
+			p.CurrentTrack.Album = trackInfo.Result.About.Album.Title
+			p.CurrentTrack.AlbumDate = trackInfo.Result.About.Album.ReleaseDate
 
 			// Provide case when got full URL.
 			re := regexp.MustCompile(`http\:(.)`)
 			res := re.FindStringSubmatch(string(trackInfo.Result.About.Audio[0].Filename))
-			prefix := "";
+			prefix := ""
 			if res == nil {
 				prefix = "http://101.ru"
 			}
-			this.CurrentTrack.PlayURL = prefix + trackInfo.Result.About.Audio[0].Filename
+			p.CurrentTrack.PlayURL = prefix + trackInfo.Result.About.Audio[0].Filename
 
 			// Provide case with wrong URL (ex: http://cdn*.101.ru/vardata/modules/musicdb/files//vardata/modules/musicdb/files/*).
 			//                                                    ^                             ^^
 			re = regexp.MustCompile(`(\/vardata\/modules\/musicdb\/files\/)`)
-			dres := re.FindAllStringSubmatch(string(this.CurrentTrack.PlayURL), -1)
-			if (len(dres) == 2) {
-				this.CurrentTrack.PlayURL = strings.Replace(this.CurrentTrack.PlayURL, "/vardata/modules/musicdb/files/", "", 1)
+			dres := re.FindAllStringSubmatch(string(p.CurrentTrack.PlayURL), -1)
+			if len(dres) == 2 {
+				p.CurrentTrack.PlayURL = strings.Replace(p.CurrentTrack.PlayURL, "/vardata/modules/musicdb/files/", "", 1)
 			}
 
 			// Calculate next fetch period. Based on the difference between current timestamp and song start timestamp.
@@ -522,11 +526,11 @@ func (this *go101) FetchChannelInfo() {
 			} else {
 				diff -= 3
 			}
-			this.NextFetch = diff
+			p.NextFetch = diff
 		},
 		Catch: func(e Exception) {
 			Debug("Got error during fetch channel info: %s", e)
-			this.NextFetch = 5
+			p.NextFetch = 5
 		},
 		Finally: func() {
 			// Normal behavior...
@@ -535,50 +539,50 @@ func (this *go101) FetchChannelInfo() {
 }
 
 // Play channel.
-func (this *go101) Play() {
-	playUrl := this.CurrentTrack.PlayURL
+func (p *go101) Play() {
+	playUrl := p.CurrentTrack.PlayURL
 	mp3.PlayProcess(playUrl)
-	this.TrackUid = this.CurrentTrack.TrackUid
-	if this.Status == STATUS_PAUSE {
-		this.Pause()
+	p.TrackUid = p.CurrentTrack.TrackUid
+	if p.Status == STATUS_PAUSE {
+		p.Pause()
 	} else {
-		this.Status = STATUS_PLAY
+		p.Status = STATUS_PLAY
 		Debug("Play sig.")
 	}
 }
 
 // Pause playing.
-func (this *go101) Pause() {
+func (p *go101) Pause() {
 	// Since we plays music from online radio station, it make sense to just mute sound.
 	// At the resume signal we will continue from actual moment of station playing.
 	mp3.MuteProcess()
-	this.Status = STATUS_PAUSE
+	p.Status = STATUS_PAUSE
 	Debug("Pause sig.")
 }
 
 // Resume playing.
-func (this *go101) Resume() {
+func (p *go101) Resume() {
 	// See go101ply.Pause()
 	mp3.UnmuteProcess()
-	this.Status = STATUS_PLAY
+	p.Status = STATUS_PLAY
 	Debug("Resume sig.")
 }
 
 // Stop playing.
-func (this *go101) Stop() {
+func (p *go101) Stop() {
 	// Call stop proc twice, just in case.
 	mp3.StopProcess()
 	mp3.StopProcess()
-	this.Status = STATUS_STOP
+	p.Status = STATUS_STOP
 	Debug("Stop sig.")
 }
 
 // Sleep function, freezes duration on pause/stop status.
-func (this *go101) Sleep(s uint64) {
+func (p *go101) Sleep(s uint64) {
 	var counter uint64
 	for true {
 		time.Sleep(time.Second)
-		if this.Status == STATUS_PLAY {
+		if p.Status == STATUS_PLAY {
 			counter += 1
 		}
 		if counter >= s {
@@ -587,16 +591,16 @@ func (this *go101) Sleep(s uint64) {
 	}
 }
 
-func (this Block) Do() {
-	if this.Finally != nil {
-		defer this.Finally()
+func (p Block) Do() {
+	if p.Finally != nil {
+		defer p.Finally()
 	}
-	if this.Catch != nil {
+	if p.Catch != nil {
 		defer func() {
 			if r := recover(); r != nil {
-				this.Catch(r)
+				p.Catch(r)
 			}
 		}()
 	}
-	this.Try()
+	p.Try()
 }

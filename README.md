@@ -4,4 +4,4 @@ Made just for fun and personal comfort.
 
 ## End of maintenance
 
-This project has moved to [conply](https://github.com/koykov/conply/101).
+This project has moved to [conply](https://github.com/koykov/conply/tree/master/101).
